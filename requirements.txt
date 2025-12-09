@@ -1,3 +1,4 @@
-streamlit
-google-generativeai
-streamlit-agraph
+streamlit==1.40.0
+google-genai==0.3.0
+streamlit-agraph==0.0.45
+pydantic
