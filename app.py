@@ -88,7 +88,7 @@ def get_gemini_response(query):
     """
 
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-flash-latest')
         full_prompt = f"{system_instruction}\n\nUser Input: '{query}'"
         
         with st.spinner(f"🔍 AI is digging into {query}..."):
