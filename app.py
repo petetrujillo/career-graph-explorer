@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import textwrap
+import urllib.parse
 import google.generativeai as genai
 from streamlit_agraph import agraph, Node, Edge, Config
 
@@ -33,26 +34,31 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
     .warning-box {
-        background-color: #331111;
-        border: 1px solid #FF4B4B;
-        padding: 10px;
+        background-color: #2d2222;
+        border-left: 5px solid #ff4b4b;
+        padding: 15px;
         border-radius: 5px;
-        color: #FF9999;
-        font-size: 0.85em;
-        margin-bottom: 15px;
-        text-align: center;
+        color: #ffcfcf;
+        font-size: 0.9em;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
     }
     .cost-counter {
         font-size: 0.8em;
         color: #00FF00;
         margin-top: 10px;
     }
+    /* Button Tweaks */
+    .stButton button {
+        width: 100%;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 1. State Management ---
 if 'mode' not in st.session_state:
-    st.session_state.mode = "Discovery" # Discovery vs Resume Match
+    st.session_state.mode = "Discovery" 
 if 'search_term' not in st.session_state:
     st.session_state.search_term = "OpenAI"
 if 'resume_text' not in st.session_state:
@@ -77,7 +83,6 @@ def get_gemini_response(mode, query, filters):
 
     genai.configure(api_key=api_key)
 
-    # Common Filters
     filter_text = f"""
     STRICT CONSTRAINTS:
     - Target Industry: {filters['industry']}
@@ -86,15 +91,15 @@ def get_gemini_response(mode, query, filters):
     """
 
     if mode == "Resume Match":
-        # --- PROMPT B: RESUME ALIGNMENT (Company-First) ---
+        # --- PROMPT B: RESUME ALIGNMENT ---
         system_instruction = f"""
-        You are a Strategic Career Agent. Analyze the user's RESUME text against the constraints.
+        You are a Strategic Career Agent. Analyze the user's RESUME text against constraints.
         
         {filter_text}
         
         TASK:
-        1. Identify the Top 5 Companies that fit this resume AND the constraints.
-        2. For EACH company, identify 2-3 specific SKILLS or EXPERIENCES from the resume that create the match.
+        1. Identify Top 5 Companies that fit this resume AND constraints.
+        2. For EACH company, identify 2-3 specific SKILLS from the resume that create the match.
         
         OUTPUT JSON STRUCTURE:
         {{
@@ -102,16 +107,16 @@ def get_gemini_response(mode, query, filters):
                 "name": "My Career",
                 "type": "Candidate",
                 "mission": "Based on your resume, these are your strongest alignment targets.",
-                "positive_news": "Focus on the skills highlighted in green.",
-                "red_flags": "Ensure you tailor your application to these strengths."
+                "positive_news": "Your Top Skills: [List top 3 skills found in resume]",
+                "red_flags": "Gaps/Areas to Improve: [List 1-2 potential gaps]"
             }},
             "connections": [
                 {{
-                    "name": "Target Company Name",
-                    "reason": "Why is this a good fit?",
+                    "name": "Target Company",
+                    "reason": "Why it fits?",
                     "sub_connections": [
-                        {{"name": "Matching Skill 1 (From Resume)", "reason": "Relevance"}},
-                        {{"name": "Matching Skill 2 (From Resume)", "reason": "Relevance"}}
+                        {{"name": "Matched Skill 1", "reason": "Relevance"}},
+                        {{"name": "Matched Skill 2", "reason": "Relevance"}}
                     ]
                 }}
             ]
@@ -120,7 +125,7 @@ def get_gemini_response(mode, query, filters):
         user_prompt = f"{system_instruction}\n\nRESUME TEXT:\n{query}"
 
     else:
-        # --- PROMPT A: DISCOVERY (Standard) ---
+        # --- PROMPT A: DISCOVERY ---
         system_instruction = f"""
         You are a Strategic Career Intelligence Engine. 
         Analyze the user's input (Company or Job Title) and return a 3-layer network graph.
@@ -149,11 +154,10 @@ def get_gemini_response(mode, query, filters):
         user_prompt = f"{system_instruction}\n\nUser Input: '{query}'"
 
     try:
-        model = genai.GenerativeModel('gemini-flash-latest')
+        model = genai.GenerativeModel('gemini-pro')
         with st.spinner(f"🔍 Analyzing..."):
             response = model.generate_content(user_prompt)
         
-        # Track usage
         input_tokens = len(user_prompt) / 4
         output_tokens = len(response.text) / 4
         st.session_state.token_usage += (input_tokens + output_tokens)
@@ -165,22 +169,42 @@ def get_gemini_response(mode, query, filters):
         st.error(f"AI Analysis Error: {e}")
         return None
 
+def generate_email_draft(company, mission, user_resume=""):
+    """Helper to generate a cold email using AI"""
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else os.environ.get("GEMINI_API_KEY")
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-flash-latest')
+        
+        context = f"My Resume Summary: {user_resume[:500]}..." if user_resume else "I am a passionate professional."
+        
+        prompt = f"""
+        Write a short, punchy (under 150 words) cold outreach email to a recruiter at {company}.
+        Context on Company: {mission}
+        Context on Me: {context}
+        Tone: Professional, enthusiastic, but not cringey.
+        Output: Just the email body.
+        """
+        response = model.generate_content(prompt)
+        return response.text
+    except:
+        return "Could not generate draft. Try again."
+
 # --- 3. Sidebar Controls ---
 with st.sidebar:
     st.title("🕸️ Career Explorer")
     
-    # 1. Mode Switcher (Top of Pane)
+    # 1. Mode Switcher
     mode = st.radio("Select Mode:", ["Discovery", "Resume Match"], horizontal=True)
     st.session_state.mode = mode
 
-    # 2. Input Section (Dynamic based on Mode)
+    # 2. Input Section
     if mode == "Discovery":
         st.subheader("🔍 Search")
         user_input = st.text_input("Enter Seed Company/Role:", value=st.session_state.search_term)
-        # Button logic moved below filters so one button triggers all
     else:
         st.subheader("📄 Resume Match")
-        st.info("🔒 Privacy: Resume data is sent to Gemini for analysis but not stored permanently. Clear session to wipe.")
+        st.info("🔒 Data is analyzed transiently and not stored.")
         user_resume = st.text_area("Paste Resume Text:", height=150, value=st.session_state.resume_text)
 
     st.divider()
@@ -194,9 +218,8 @@ with st.sidebar:
     f_style = st.selectbox("Work Style", 
         ["Any", "Remote Friendly", "In-Office / Hybrid"])
 
-    # 4. Primary Action Button
+    # 4. Primary Action
     if st.button("🚀 Launch Analysis", type="primary"):
-        # Reset graph to force reload
         st.session_state.graph_data = None
         if mode == "Discovery":
             st.session_state.search_term = user_input
@@ -204,7 +227,7 @@ with st.sidebar:
             st.session_state.resume_text = user_resume
         st.rerun()
 
-    # 5. Clear Session
+    # 5. Clear
     if st.button("🗑️ Clear Session"):
         st.session_state.history = []
         st.session_state.graph_data = None
@@ -213,14 +236,12 @@ with st.sidebar:
         st.session_state.token_usage = 0
         st.rerun()
 
-    # Cost Tracking
     cost = (st.session_state.token_usage / 1000000) * 0.50
     st.markdown(f"<div class='cost-counter'>💰 Est. Session Cost: ${cost:.5f}</div>", unsafe_allow_html=True)
 
 # --- 4. Main Logic ---
 filters = {"industry": f_industry, "size": f_size, "style": f_style}
 
-# Determine what query to run
 if st.session_state.mode == "Discovery":
     active_query = st.session_state.search_term
 elif st.session_state.mode == "Resume Match":
@@ -229,9 +250,7 @@ elif st.session_state.mode == "Resume Match":
         st.info("👈 Please paste your resume in the sidebar to begin.")
         st.stop()
 
-# Fetch Data if needed
-# We check if graph is missing OR if the center node name doesn't match the current "context"
-# For Resume mode, we just check if graph is None because the Center Name is always "My Career"
+# Auto-Fetch Logic
 should_fetch = False
 if st.session_state.graph_data is None:
     should_fetch = True
@@ -242,7 +261,6 @@ if should_fetch:
     data = get_gemini_response(st.session_state.mode, active_query, filters)
     if data:
         st.session_state.graph_data = data
-        # Only add to history in Discovery mode
         if st.session_state.mode == "Discovery":
             real_name = data['center_node']['name']
             if real_name not in st.session_state.history:
@@ -258,12 +276,9 @@ if data:
     connections = data['connections']
 
     # --- CENTER COLUMN: Warning & Graph ---
-    
-    # Warning Header
     st.markdown("""
     <div class="warning-box">
-        ⚠️ <b>AI Generated Content:</b> Results are generated by Google Gemini. 
-        Always verify company details, role availability, and financial health independently.
+        <div>⚠️ <b>AI Generated Advisory:</b> Information is generated by Gemini Pro. Verify all role availability, financial health, and company details independently.</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -328,7 +343,7 @@ if data:
 
     config = Config(
         width=1400,
-        height=600,
+        height=550,
         directed=False, 
         physics=True, 
         hierarchical=False,
@@ -337,7 +352,6 @@ if data:
         collapsible=False
     )
 
-    # Render Graph (Top of Page)
     col_main, col_right = st.columns([2.5, 1])
     
     with col_main:
@@ -345,7 +359,8 @@ if data:
 
     # --- RIGHT COLUMN: Tabs ---
     with col_right:
-        tab_dossier, tab_links = st.tabs(["📂 Dossier", "🔗 Links"])
+        # TABS: Dossier | Actions | Network
+        tab_dossier, tab_actions, tab_net = st.tabs(["📂 Dossier", "⚡ Actions", "🕸️ Network"])
         
         with tab_dossier:
             st.subheader(f"{center_info['name']}")
@@ -360,14 +375,34 @@ if data:
                         {center_info['positive_news']}
                     </p>
                     <p>
-                        <span class="highlight-title">🚩 Notes</span><br>
+                        <span class="highlight-title">🚩 Red Flags</span><br>
                         {center_info['red_flags']}
                     </p>
                 </div>
             """
             st.markdown(textwrap.dedent(raw_html), unsafe_allow_html=True)
 
-        with tab_links:
+        with tab_actions:
+            st.subheader("Take Action")
+            st.markdown("Don't just look, apply.")
+            
+            # 1. SMART LINKS
+            company_safe = urllib.parse.quote(center_info['name'])
+            st.link_button(f"💼 Jobs at {center_info['name']} (LinkedIn)", 
+                           f"https://www.linkedin.com/jobs/search/?keywords={company_safe}")
+            st.link_button(f"📰 News about {center_info['name']} (Google)", 
+                           f"https://www.google.com/search?q={company_safe}+news&tbm=nws")
+            
+            st.divider()
+            
+            # 2. EMAIL GENERATOR
+            st.write("**📧 Cold Outreach Generator**")
+            if st.button("Draft Email to Recruiter"):
+                with st.spinner("Writing draft..."):
+                    draft = generate_email_draft(center_info['name'], center_info['mission'], st.session_state.resume_text)
+                    st.text_area("Copy this:", value=draft, height=200)
+
+        with tab_net:
             st.write("### Connections")
             for c in connections:
                 st.markdown(f"**{c['name']}**")
@@ -375,9 +410,8 @@ if data:
                 st.divider()
 
     # --- Interaction Handler ---
-    # If user clicks a node (and it's not the center), we switch to Discovery Mode for that node
     if clicked_node and clicked_node != center_info['name']:
-        st.session_state.mode = "Discovery" # Switch mode to explore that company
+        st.session_state.mode = "Discovery"
         st.session_state.search_term = clicked_node
         st.session_state.graph_data = None 
         st.rerun()
