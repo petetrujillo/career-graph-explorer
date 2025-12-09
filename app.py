@@ -111,7 +111,7 @@ def get_gemini_response(query, filters):
     """
 
     try:
-        model = genai.GenerativeModel('gemini-latest-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
         full_prompt = f"{system_instruction}\n\nUser Input: '{query}'"
         
         with st.spinner(f"🔍 Hunting for {filters['size']} companies in {filters['industry']}..."):
