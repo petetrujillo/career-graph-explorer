@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 import os
-import textwrap  # <--- Added this library to fix the formatting
+import textwrap
 import google.generativeai as genai
 from streamlit_agraph import agraph, Node, Edge, Config
 
@@ -17,17 +17,16 @@ st.markdown("""
         border-radius: 10px;
         margin-bottom: 15px;
         border: 1px solid #4B4B4B;
-    }
-    .metric-header {
-        font-size: 1.0em;
-        font-weight: bold;
-        color: #FF4B4B;
-        margin-top: 10px;
-    }
-    .metric-content {
-        font-size: 0.9em;
         color: #FAFAFA;
-        margin-bottom: 10px;
+    }
+    .deep-dive-card p {
+        margin-bottom: 15px;
+        line-height: 1.5;
+    }
+    .highlight-title {
+        color: #FF4B4B;
+        font-weight: bold;
+        font-size: 1.05em;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -89,7 +88,7 @@ def get_gemini_response(query):
     """
 
     try:
-        model = genai.GenerativeModel('gemini-flash-latest')
+        model = genai.GenerativeModel('gemini-pro')
         full_prompt = f"{system_instruction}\n\nUser Input: '{query}'"
         
         with st.spinner(f"🔍 AI is digging into {query}..."):
@@ -145,18 +144,22 @@ if data:
     with col_details:
         st.subheader(f"🏢 {center_info['name']}")
         
-        # --- THE FORMATTING FIX IS HERE ---
-        # We use textwrap.dedent to force-remove any indentation that breaks the HTML
+        # --- SIMPLIFIED HTML STRUCTURE ---
+        # Using simple <p> tags and <br> for breaks. No complex nesting.
         raw_html = f"""
             <div class="deep-dive-card">
-                <div class="metric-header">📌 Mission / Overview</div>
-                <div class="metric-content">{center_info['mission']}</div>
-                
-                <div class="metric-header">🚀 Positive Signals</div>
-                <div class="metric-content">{center_info['positive_news']}</div>
-                
-                <div class="metric-header">🚩 Red Flags / Awareness</div>
-                <div class="metric-content">{center_info['red_flags']}</div>
+                <p>
+                    <span class="highlight-title">📌 Mission / Overview</span><br>
+                    {center_info['mission']}
+                </p>
+                <p>
+                    <span class="highlight-title">🚀 Positive Signals</span><br>
+                    {center_info['positive_news']}
+                </p>
+                <p>
+                    <span class="highlight-title">🚩 Red Flags / Awareness</span><br>
+                    {center_info['red_flags']}
+                </p>
             </div>
         """
         st.markdown(textwrap.dedent(raw_html), unsafe_allow_html=True)
