@@ -91,7 +91,7 @@ def get_gemini_response(query):
     # If this fails, 'gemini-pro' is a safe fallback.
     try:
         model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash', 
+            model_name='gemini-flash-latest', 
             system_instruction=system_instruction,
             generation_config={"response_mime_type": "application/json"}
         )
