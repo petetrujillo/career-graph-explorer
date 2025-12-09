@@ -144,8 +144,6 @@ if data:
     with col_details:
         st.subheader(f"🏢 {center_info['name']}")
         
-        # --- SIMPLIFIED HTML STRUCTURE ---
-        # Using simple <p> tags and <br> for breaks. No complex nesting.
         raw_html = f"""
             <div class="deep-dive-card">
                 <p>
@@ -191,7 +189,7 @@ if data:
                 label=item['name'], 
                 size=25, 
                 color="#00C0F2",
-                title=item['reason']
+                title=item['reason'],
                 # FIX: Prevent browser from trying to open this as a link on double-click
                 url="javascript:void(0);"
             ))
