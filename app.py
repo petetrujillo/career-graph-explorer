@@ -179,7 +179,9 @@ if data:
             label=center_info['name'], 
             size=45, 
             color="#FF4B4B",
-            font={'color': 'white'}
+            font={'color': 'white'},
+            # FIX: Prevent browser from trying to open this as a link on double-click
+            url="javascript:void(0);" 
         ))
 
         # Connection Nodes
@@ -190,6 +192,8 @@ if data:
                 size=25, 
                 color="#00C0F2",
                 title=item['reason']
+                # FIX: Prevent browser from trying to open this as a link on double-click
+                url="javascript:void(0);"
             ))
             edges.append(Edge(
                 source=center_info['name'], 
