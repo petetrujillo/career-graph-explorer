@@ -158,28 +158,29 @@ if data:
     center_info = data['center_node']
     connections = data['connections']
 
-    # --- RIGHT COLUMN: The "Deep Dive" Side Pane ---
+# --- RIGHT COLUMN: The "Deep Dive" Side Pane ---
     with col_details:
         st.subheader(f"🏢 {center_info['name']}")
         
-        # Render the card
+        # FIX: We remove indentation inside the string to prevent Markdown from making it a code block
         html = f"""
-        <div class="deep-dive-card">
-            <div class="metric-header">📌 Mission / Overview</div>
-            <div class="metric-content">{center_info['mission']}</div>
-            
-            <div class="metric-header">🚀 Positive Signals</div>
-            <div class="metric-content">{center_info['positive_news']}</div>
-            
-            <div class="metric-header">🚩 Red Flags / Awareness</div>
-            <div class="metric-content">{center_info['red_flags']}</div>
-        </div>
-        """
+<div class="deep-dive-card">
+    <div class="metric-header">📌 Mission / Overview</div>
+    <div class="metric-content">{center_info['mission']}</div>
+    
+    <div class="metric-header">🚀 Positive Signals</div>
+    <div class="metric-content">{center_info['positive_news']}</div>
+    
+    <div class="metric-header">🚩 Red Flags / Awareness</div>
+    <div class="metric-content">{center_info['red_flags']}</div>
+</div>
+"""
         st.markdown(html, unsafe_allow_html=True)
         
         st.write("### 🔗 Connections Found:")
         for c in connections:
-            st.markdown(f"**{c['name']}**: {c['reason']}")
+             # Using a cleaner bullet point format for the connections
+            st.markdown(f"- **{c['name']}**: {c['reason']}")
 
     # --- LEFT COLUMN: The Graph ---
     with col_graph:
