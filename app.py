@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import os
+import textwrap  # <--- Added this library to fix the formatting
 import google.generativeai as genai
 from streamlit_agraph import agraph, Node, Edge, Config
 
@@ -28,21 +29,12 @@ st.markdown("""
         color: #FAFAFA;
         margin-bottom: 10px;
     }
-    .connection-tag {
-        display: inline-block;
-        background-color: #0E1117;
-        border: 1px solid #FF4B4B;
-        padding: 5px 10px;
-        border-radius: 15px;
-        font-size: 0.8em;
-        margin: 2px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 1. State Management ---
 if 'search_term' not in st.session_state:
-    st.session_state.search_term = "OpenAI" # Default start
+    st.session_state.search_term = "OpenAI"
 if 'graph_data' not in st.session_state:
     st.session_state.graph_data = None
 if 'history' not in st.session_state:
@@ -50,20 +42,17 @@ if 'history' not in st.session_state:
 
 # --- 2. Google Gemini Setup ---
 def get_gemini_response(query):
-    # 1. Get API Key
     try:
         api_key = st.secrets["GEMINI_API_KEY"]
     except Exception:
         api_key = os.environ.get("GEMINI_API_KEY")
     
     if not api_key:
-        st.error("⚠️ GEMINI_API_KEY not found! Please check your Streamlit Secrets.")
+        st.error("⚠️ GEMINI_API_KEY not found! Check your Streamlit Secrets.")
         return None
 
-    # 2. Configure
     genai.configure(api_key=api_key)
 
-    # 3. Enhanced System Prompt (Your Specific Requirements)
     system_instruction = """
     You are a Strategic Career Intelligence Engine. 
     Analyze the user's input (Company or Job Title) and return a STRICT JSON object.
@@ -71,8 +60,8 @@ def get_gemini_response(query):
     PART 1: CENTER NODE ANALYSIS (The Deep Dive)
     For the input entity, provide:
     1. "mission": Brief, neutral overview of mission/product.
-    2. "positive_news": Major positive news from last 6-12 months (e.g. launches, earnings).
-    3. "red_flags": Recent red flags or neutral warnings (e.g. layoffs, restructuring).
+    2. "positive_news": Major positive news from last 6-12 months.
+    3. "red_flags": Recent red flags or neutral warnings.
     
     PART 2: CONNECTIONS (The Graph)
     Identify 6-8 related entities:
@@ -106,7 +95,6 @@ def get_gemini_response(query):
         with st.spinner(f"🔍 AI is digging into {query}..."):
             response = model.generate_content(full_prompt)
         
-        # Clean response string (Gemini sometimes adds ```json markers)
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_text)
         
@@ -117,7 +105,6 @@ def get_gemini_response(query):
 # --- 3. Sidebar Controls ---
 with st.sidebar:
     st.header("🕸️ Career Explorer")
-    # Search Input
     user_input = st.text_input("Search Company/Role:", value=st.session_state.search_term)
     if st.button("New Search"):
         st.session_state.search_term = user_input
@@ -125,7 +112,6 @@ with st.sidebar:
 
     st.divider()
     st.write("Recent Path:")
-    # Reverse history to show newest first
     for i, h in enumerate(reversed(st.session_state.history[-5:])):
         if st.button(f"🔙 {h}", key=f"hist_{i}"):
             st.session_state.search_term = h
@@ -134,18 +120,15 @@ with st.sidebar:
 # --- 4. Main Data Logic ---
 current_query = st.session_state.search_term
 
-# Trigger fetch if query changed OR if data is missing
 if st.session_state.graph_data is None or \
    st.session_state.graph_data.get('center_node', {}).get('name') != current_query:
     
     data = get_gemini_response(current_query)
     if data:
         st.session_state.graph_data = data
-        # Add to history if unique
         real_name = data['center_node']['name']
         if real_name not in st.session_state.history:
             st.session_state.history.append(real_name)
-        # Update search term to match the cleaned name
         if current_query != real_name:
             st.session_state.search_term = real_name
 
@@ -158,28 +141,28 @@ if data:
     center_info = data['center_node']
     connections = data['connections']
 
-# --- RIGHT COLUMN: The "Deep Dive" Side Pane ---
+    # --- RIGHT COLUMN: The "Deep Dive" Side Pane ---
     with col_details:
         st.subheader(f"🏢 {center_info['name']}")
         
-        # FIX: We remove indentation inside the string to prevent Markdown from making it a code block
-        html = f"""
-<div class="deep-dive-card">
-    <div class="metric-header">📌 Mission / Overview</div>
-    <div class="metric-content">{center_info['mission']}</div>
-    
-    <div class="metric-header">🚀 Positive Signals</div>
-    <div class="metric-content">{center_info['positive_news']}</div>
-    
-    <div class="metric-header">🚩 Red Flags / Awareness</div>
-    <div class="metric-content">{center_info['red_flags']}</div>
-</div>
-"""
-        st.markdown(html, unsafe_allow_html=True)
+        # --- THE FORMATTING FIX IS HERE ---
+        # We use textwrap.dedent to force-remove any indentation that breaks the HTML
+        raw_html = f"""
+            <div class="deep-dive-card">
+                <div class="metric-header">📌 Mission / Overview</div>
+                <div class="metric-content">{center_info['mission']}</div>
+                
+                <div class="metric-header">🚀 Positive Signals</div>
+                <div class="metric-content">{center_info['positive_news']}</div>
+                
+                <div class="metric-header">🚩 Red Flags / Awareness</div>
+                <div class="metric-content">{center_info['red_flags']}</div>
+            </div>
+        """
+        st.markdown(textwrap.dedent(raw_html), unsafe_allow_html=True)
         
         st.write("### 🔗 Connections Found:")
         for c in connections:
-             # Using a cleaner bullet point format for the connections
             st.markdown(f"- **{c['name']}**: {c['reason']}")
 
     # --- LEFT COLUMN: The Graph ---
@@ -187,7 +170,7 @@ if data:
         nodes = []
         edges = []
 
-        # 1. Center Node
+        # Center Node
         nodes.append(Node(
             id=center_info['name'], 
             label=center_info['name'], 
@@ -196,7 +179,7 @@ if data:
             font={'color': 'white'}
         ))
 
-        # 2. Connection Nodes
+        # Connection Nodes
         for item in connections:
             nodes.append(Node(
                 id=item['name'], 
@@ -222,14 +205,11 @@ if data:
             collapsible=False
         )
 
-        # RENDER GRAPH & CAPTURE CLICK
         clicked_node = agraph(nodes=nodes, edges=edges, config=config)
 
-        # --- THE INFINITE DRILL LOGIC ---
-        # If a node is clicked AND it's not the one we are already looking at:
         if clicked_node and clicked_node != center_info['name']:
             st.session_state.search_term = clicked_node
-            st.rerun() # Force immediate reload with new center
+            st.rerun()
             
 else:
     st.info("Waiting for data...")
