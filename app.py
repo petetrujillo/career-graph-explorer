@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 import os
-import google.generativeai as genai # CHANGED: Using the standard library
+import google.generativeai as genai
 from streamlit_agraph import agraph, Node, Edge, Config
 
 # --- Page Configuration ---
@@ -10,43 +10,46 @@ st.set_page_config(layout="wide", page_title="Career Graph Explorer")
 # --- CSS for Vibe Check Styling ---
 st.markdown("""
 <style>
-    .vibe-card {
+    .deep-dive-card {
         background-color: #262730;
-        padding: 15px;
+        padding: 20px;
         border-radius: 10px;
-        margin-bottom: 10px;
+        margin-bottom: 15px;
         border: 1px solid #4B4B4B;
     }
-    .vibe-name {
-        font-size: 1.2em;
+    .metric-header {
+        font-size: 1.0em;
         font-weight: bold;
         color: #FF4B4B;
+        margin-top: 10px;
     }
-    .vibe-reason {
+    .metric-content {
         font-size: 0.9em;
         color: #FAFAFA;
+        margin-bottom: 10px;
     }
-    .vibe-meta {
+    .connection-tag {
+        display: inline-block;
+        background-color: #0E1117;
+        border: 1px solid #FF4B4B;
+        padding: 5px 10px;
+        border-radius: 15px;
         font-size: 0.8em;
-        color: #A0A0A0;
-        margin-top: 5px;
+        margin: 2px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 1. State Management ---
 if 'search_term' not in st.session_state:
-    st.session_state.search_term = "OpenAI"
+    st.session_state.search_term = "OpenAI" # Default start
 if 'graph_data' not in st.session_state:
     st.session_state.graph_data = None
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# --- 2. Google Gemini Setup (UPDATED) ---
+# --- 2. Google Gemini Setup ---
 def get_gemini_response(query):
-    """
-    Uses the stable google-generativeai library.
-    """
     # 1. Get API Key
     try:
         api_key = st.secrets["GEMINI_API_KEY"]
@@ -57,125 +60,175 @@ def get_gemini_response(query):
         st.error("⚠️ GEMINI_API_KEY not found! Please check your Streamlit Secrets.")
         return None
 
-    # 2. Configure the library
+    # 2. Configure
     genai.configure(api_key=api_key)
 
-    # 3. Define the System Prompt
+    # 3. Enhanced System Prompt (Your Specific Requirements)
     system_instruction = """
-    You are a Career Data Engine. Analyze the user's input.
+    You are a Strategic Career Intelligence Engine. 
+    Analyze the user's input (Company or Job Title) and return a STRICT JSON object.
+
+    PART 1: CENTER NODE ANALYSIS (The Deep Dive)
+    For the input entity, provide:
+    1. "mission": Brief, neutral overview of mission/product.
+    2. "positive_news": Major positive news from last 6-12 months (e.g. launches, earnings).
+    3. "red_flags": Recent red flags or neutral warnings (e.g. layoffs, restructuring).
     
-    1. INTENT DETECTION: Determine if the input is a 'Company' (e.g., SpaceX, Google) or a 'Job Title/Skill' (e.g., Python Developer, Marketing Manager).
+    PART 2: CONNECTIONS (The Graph)
+    Identify 6-8 related entities:
+    - If input is Company -> Return Competitors.
+    - If input is Job -> Return Top Hiring Companies.
     
-    2. DATA GENERATION:
-       - If COMPANY: Return 6-8 Competitors or companies with similar engineering cultures.
-       - If JOB TITLE: Return 6-8 Top Companies known for hiring this role with good reputation.
-    
-    3. OUTPUT FORMAT: Return ONLY valid JSON. No markdown formatting.
-    Structure:
+    PART 3: JSON STRUCTURE
+    Return ONLY raw JSON. No markdown.
     {
-        "center_node_type": "Company" or "Job",
-        "center_node_label": "Corrected Name of Input",
+        "center_node": {
+            "name": "Corrected Name",
+            "type": "Company" or "Job",
+            "mission": "...",
+            "positive_news": "...",
+            "red_flags": "..."
+        },
         "connections": [
             {
-                "name": "Company Name",
-                "type": "Competitor" or "Hiring Company",
-                "industry": "Industry Name",
-                "reason": "A short, punchy 'vibe check' (max 15 words) explaining the culture or why it's a match."
+                "name": "Related Company Name",
+                "reason": "Why is this connected? (Short context)",
+                "type": "Competitor" or "Hiring"
             }
         ]
     }
     """
 
-    # 4. Create Model & Generate
-    # We use 'gemini-1.5-flash' which is standard. 
-    # If this fails, 'gemini-pro' is a safe fallback.
     try:
-        model = genai.GenerativeModel(
-            model_name='gemini-flash-latest', 
-            system_instruction=system_instruction,
-            generation_config={"response_mime_type": "application/json"}
-        )
+        model = genai.GenerativeModel('gemini-pro')
+        full_prompt = f"{system_instruction}\n\nUser Input: '{query}'"
         
-        response = model.generate_content(f"Analyze this query: '{query}'")
-        return json.loads(response.text)
+        with st.spinner(f"🔍 AI is digging into {query}..."):
+            response = model.generate_content(full_prompt)
+        
+        # Clean response string (Gemini sometimes adds ```json markers)
+        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_text)
         
     except Exception as e:
-        st.error(f"AI Error: {e}")
+        st.error(f"AI Analysis Error: {e}")
         return None
 
-# --- 3. UI & Logic ---
-
-st.title("🕸️ Career Graph Explorer")
-st.markdown("Enter a **Company** (to find competitors) or a **Job Title** (to find where to apply). Click nodes to explore infinitely!")
-
+# --- 3. Sidebar Controls ---
 with st.sidebar:
-    st.header("🔍 Search")
-    user_input = st.text_input("Enter Company or Job:", value=st.session_state.search_term)
-    if st.button("Explore"):
+    st.header("🕸️ Career Explorer")
+    # Search Input
+    user_input = st.text_input("Search Company/Role:", value=st.session_state.search_term)
+    if st.button("New Search"):
         st.session_state.search_term = user_input
+        st.rerun()
 
-# --- 4. Main Data Loop ---
-
-current_query = st.session_state.search_term
-
-if 'last_fetched_query' not in st.session_state:
-    st.session_state.last_fetched_query = ""
-
-data = st.session_state.graph_data
-
-if current_query != st.session_state.last_fetched_query:
-    with st.spinner(f"AI is analyzing '{current_query}'..."):
-        data = get_gemini_response(current_query)
-        if data:
-            st.session_state.graph_data = data
-            st.session_state.last_fetched_query = current_query
-            if current_query not in st.session_state.history:
-                st.session_state.history.append(current_query)
-
-# --- 5. Layout ---
-
-col_graph, col_details = st.columns([3, 1.5])
-
-if data:
-    center_label = data.get("center_node_label", current_query)
-    connections = data.get("connections", [])
-
-    nodes = []
-    edges = []
-
-    nodes.append(Node(id=center_label, label=center_label, size=40, color="#FF4B4B", shape="dot"))
-
-    for item in connections:
-        nodes.append(Node(id=item['name'], label=item['name'], size=25, color="#00C0F2", shape="dot", title=item['reason']))
-        edges.append(Edge(source=center_label, target=item['name'], color="#505050", type="STRAIGHT"))
-
-    with col_graph:
-        config = Config(width=800, height=600, directed=True, physics=True, nodeHighlightBehavior=True, highlightColor="#F7A7A6", collapsible=False)
-        clicked_node_id = agraph(nodes=nodes, edges=edges, config=config)
-
-        if clicked_node_id and clicked_node_id != center_label:
-            st.session_state.search_term = clicked_node_id
-            st.rerun()
-
-    with col_details:
-        st.subheader("📋 Vibe Check")
-        st.markdown(f"**Analysis for:** {center_label}")
-        for item in connections:
-            html = f"""
-            <div class="vibe-card">
-                <div class="vibe-name">{item['name']}</div>
-                <div class="vibe-reason">{item['reason']}</div>
-                <div class="vibe-meta">{item['type']} | {item['industry']}</div>
-            </div>
-            """
-            st.markdown(html, unsafe_allow_html=True)
-else:
-    st.info("Waiting for input...")
-
-with st.sidebar:
     st.divider()
-    st.write("Recent Explorations:")
-    for h in reversed(st.session_state.history[-5:]):
-        if st.button(f"🔙 {h}", key=f"hist_{h}"):
+    st.write("Recent Path:")
+    # Reverse history to show newest first
+    for i, h in enumerate(reversed(st.session_state.history[-5:])):
+        if st.button(f"🔙 {h}", key=f"hist_{i}"):
             st.session_state.search_term = h
             st.rerun()
+
+# --- 4. Main Data Logic ---
+current_query = st.session_state.search_term
+
+# Trigger fetch if query changed OR if data is missing
+if st.session_state.graph_data is None or \
+   st.session_state.graph_data.get('center_node', {}).get('name') != current_query:
+    
+    data = get_gemini_response(current_query)
+    if data:
+        st.session_state.graph_data = data
+        # Add to history if unique
+        real_name = data['center_node']['name']
+        if real_name not in st.session_state.history:
+            st.session_state.history.append(real_name)
+        # Update search term to match the cleaned name
+        if current_query != real_name:
+            st.session_state.search_term = real_name
+
+# --- 5. Layout Rendering ---
+data = st.session_state.graph_data
+
+if data:
+    col_graph, col_details = st.columns([2.5, 1.5])
+    
+    center_info = data['center_node']
+    connections = data['connections']
+
+    # --- RIGHT COLUMN: The "Deep Dive" Side Pane ---
+    with col_details:
+        st.subheader(f"🏢 {center_info['name']}")
+        
+        # Render the card
+        html = f"""
+        <div class="deep-dive-card">
+            <div class="metric-header">📌 Mission / Overview</div>
+            <div class="metric-content">{center_info['mission']}</div>
+            
+            <div class="metric-header">🚀 Positive Signals</div>
+            <div class="metric-content">{center_info['positive_news']}</div>
+            
+            <div class="metric-header">🚩 Red Flags / Awareness</div>
+            <div class="metric-content">{center_info['red_flags']}</div>
+        </div>
+        """
+        st.markdown(html, unsafe_allow_html=True)
+        
+        st.write("### 🔗 Connections Found:")
+        for c in connections:
+            st.markdown(f"**{c['name']}**: {c['reason']}")
+
+    # --- LEFT COLUMN: The Graph ---
+    with col_graph:
+        nodes = []
+        edges = []
+
+        # 1. Center Node
+        nodes.append(Node(
+            id=center_info['name'], 
+            label=center_info['name'], 
+            size=45, 
+            color="#FF4B4B",
+            font={'color': 'white'}
+        ))
+
+        # 2. Connection Nodes
+        for item in connections:
+            nodes.append(Node(
+                id=item['name'], 
+                label=item['name'], 
+                size=25, 
+                color="#00C0F2",
+                title=item['reason']
+            ))
+            edges.append(Edge(
+                source=center_info['name'], 
+                target=item['name'], 
+                color="#505050",
+            ))
+
+        config = Config(
+            width=800,
+            height=600,
+            directed=True, 
+            physics=True, 
+            hierarchical=False,
+            nodeHighlightBehavior=True,
+            highlightColor="#F7A7A6",
+            collapsible=False
+        )
+
+        # RENDER GRAPH & CAPTURE CLICK
+        clicked_node = agraph(nodes=nodes, edges=edges, config=config)
+
+        # --- THE INFINITE DRILL LOGIC ---
+        # If a node is clicked AND it's not the one we are already looking at:
+        if clicked_node and clicked_node != center_info['name']:
+            st.session_state.search_term = clicked_node
+            st.rerun() # Force immediate reload with new center
+            
+else:
+    st.info("Waiting for data...")
