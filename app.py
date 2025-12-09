@@ -154,7 +154,7 @@ def get_gemini_response(mode, query, filters):
         user_prompt = f"{system_instruction}\n\nUser Input: '{query}'"
 
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-flash-latest')
         with st.spinner(f"🔍 Analyzing..."):
             response = model.generate_content(user_prompt)
         
