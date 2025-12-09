@@ -52,22 +52,21 @@ def get_gemini_response(query):
 
     genai.configure(api_key=api_key)
 
+    # UPDATED PROMPT: Asks for 10 connections + 2 sub-connections each (3 Layers total)
     system_instruction = """
     You are a Strategic Career Intelligence Engine. 
-    Analyze the user's input (Company or Job Title) and return a STRICT JSON object.
+    Analyze the user's input (Company or Job Title) and return a STRICT JSON object representing a 3-layer network graph.
 
-    PART 1: CENTER NODE ANALYSIS (The Deep Dive)
-    For the input entity, provide:
-    1. "mission": Brief, neutral overview of mission/product.
-    2. "positive_news": Major positive news from last 6-12 months.
-    3. "red_flags": Recent red flags or neutral warnings.
+    PART 1: CENTER NODE (Layer 0)
+    Provide 'mission', 'positive_news', and 'red_flags' for the input.
+
+    PART 2: DIRECT CONNECTIONS (Layer 1)
+    Identify exactly 10 related entities (Competitors or Hiring Companies).
     
-    PART 2: CONNECTIONS (The Graph)
-    Identify 6-8 related entities:
-    - If input is Company -> Return Competitors.
-    - If input is Job -> Return Top Hiring Companies.
-    
-    PART 3: JSON STRUCTURE
+    PART 3: SECONDARY CONNECTIONS (Layer 2)
+    For EACH of the 10 Layer 1 entities, identify 2 of THEIR top connections (sub_connections).
+
+    PART 4: JSON STRUCTURE
     Return ONLY raw JSON. No markdown.
     {
         "center_node": {
@@ -79,19 +78,23 @@ def get_gemini_response(query):
         },
         "connections": [
             {
-                "name": "Related Company Name",
-                "reason": "Why is this connected? (Short context)",
-                "type": "Competitor" or "Hiring"
+                "name": "Layer 1 Company",
+                "reason": "Why related?",
+                "sub_connections": [
+                    {"name": "Layer 2 Company A", "reason": "Reason"},
+                    {"name": "Layer 2 Company B", "reason": "Reason"}
+                ]
             }
         ]
     }
     """
 
     try:
+        # Using gemini-1.5-flash for speed with larger token output, or pro if preferred
         model = genai.GenerativeModel('gemini-flash-latest')
         full_prompt = f"{system_instruction}\n\nUser Input: '{query}'"
         
-        with st.spinner(f"🔍 AI is digging into {query}..."):
+        with st.spinner(f"🔍 Mapping 3-layer network for {query}..."):
             response = model.generate_content(full_prompt)
         
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
@@ -162,47 +165,75 @@ if data:
         """
         st.markdown(textwrap.dedent(raw_html), unsafe_allow_html=True)
         
-        st.write("### 🔗 Connections Found:")
-        for c in connections:
+        st.write("### 🔗 Top Connections")
+        for c in connections[:5]: # Show top 5 in text to save space
             st.markdown(f"- **{c['name']}**: {c['reason']}")
 
     # --- LEFT COLUMN: The Graph ---
     with col_graph:
         nodes = []
         edges = []
+        node_ids = set() # Track IDs to prevent duplicates
 
-        # Center Node
+        # 1. LAYER 0: Center Node (Red)
         nodes.append(Node(
             id=center_info['name'], 
             label=center_info['name'], 
-            size=45, 
-            color="#FF4B4B",
+            size=50, 
+            color="#FF4B4B", # Red
             font={'color': 'white'},
-            # FIX: Prevent browser from trying to open this as a link on double-click
-            url="javascript:void(0);" 
+            url="javascript:void(0);"
         ))
+        node_ids.add(center_info['name'])
 
-        # Connection Nodes
+        # Loop through Layer 1 (Direct Connections)
         for item in connections:
-            nodes.append(Node(
-                id=item['name'], 
-                label=item['name'], 
-                size=25, 
-                color="#00C0F2",
-                title=item['reason'],
-                # FIX: Prevent browser from trying to open this as a link on double-click
-                url="javascript:void(0);"
-            ))
+            # 2. LAYER 1: Direct Nodes (Blue)
+            if item['name'] not in node_ids:
+                nodes.append(Node(
+                    id=item['name'], 
+                    label=item['name'], 
+                    size=30, 
+                    color="#00C0F2", # Blue
+                    title=item['reason'],
+                    url="javascript:void(0);"
+                ))
+                node_ids.add(item['name'])
+            
+            # Edge: Center -> Layer 1
             edges.append(Edge(
                 source=center_info['name'], 
                 target=item['name'], 
-                color="#505050",
+                color="#808080",
+                width=2
             ))
 
+            # 3. LAYER 2: Sub-connections (Green)
+            if 'sub_connections' in item:
+                for sub in item['sub_connections']:
+                    if sub['name'] not in node_ids:
+                        nodes.append(Node(
+                            id=sub['name'], 
+                            label=sub['name'], 
+                            size=15, # Smaller
+                            color="#1DB954", # Green for depth
+                            title=f"Connected to {item['name']}",
+                            url="javascript:void(0);"
+                        ))
+                        node_ids.add(sub['name'])
+                    
+                    # Edge: Layer 1 -> Layer 2
+                    edges.append(Edge(
+                        source=item['name'], 
+                        target=sub['name'], 
+                        color="#404040", # Darker/Thinner lines for depth
+                        width=1
+                    ))
+
         config = Config(
-            width=800,
-            height=600,
-            directed=True, 
+            width=900,
+            height=700,
+            directed=False, # Undirected often looks better for deep webs
             physics=True, 
             hierarchical=False,
             nodeHighlightBehavior=True,
