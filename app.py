@@ -366,13 +366,21 @@ if should_fetch:
         data['mode'] = active_mode # Save the mode to state data for comparison
         st.session_state.graph_data = data
         
-        # History and auto-update for Discovery Mode only
+        # EXTRACT THE REAL NAME FROM AI RESPONSE
+        real_name = data['center_node']['name']
+        
+        # 1. Handle Company Discovery Updates
         if active_mode == "Company Discovery":
-            real_name = data['center_node']['name']
             if real_name not in st.session_state.history:
                 st.session_state.history.append(real_name)
             if active_query != real_name:
-                st.session_state.company_search_term = real_name # Update search box if model corrected the name
+                st.session_state.company_search_term = real_name
+        
+        # 2. Handle Role Search Updates (THIS WAS MISSING)
+        elif active_mode == "Role Search":
+            if active_query != real_name:
+                st.session_state.role_search_term = real_name
+
         st.rerun()
 
 # --- 5. Layout Rendering ---
